@@ -1,4 +1,3 @@
-# Clientes
 # Sistema de Gerenciamento de Clientes - ASP.NET Core MVC
 
 ## 📌 Descrição do Projeto
