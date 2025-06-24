@@ -1,168 +1,99 @@
-﻿using Fiap.Web.Alunos.Models;
+﻿using AutoMapper;
+using Fiap.Web.Alunos.Data;
+using Fiap.Web.Alunos.Models;
+using Fiap.Web.Alunos.Services;
+using Fiap.Web.Alunos.ViewModel;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
-using System;
-using System.ComponentModel.DataAnnotations;
-
+using Microsoft.EntityFrameworkCore;
 namespace Fiap.Web.Alunos.Controllers
 {
     public class ClienteController : Controller
     {
-
-        //private List<ClienteModel> _clientes;
-        public IList<ClienteModel> clientes { get; set; }
-        public IList<RepresentanteModel> representantes { get; set; }
-        public ClienteController()
+        private readonly DatabaseContext _context;
+        private readonly IMapper _mapper;
+        private readonly IClienteService _clienteService;
+        public ClienteController(DatabaseContext context, IMapper mapper, IClienteService clienteService)
         {
-            clientes = GerarClientesMocados();
-            representantes = GerarRepresentantesMocados();
+            _context = context;
+            _mapper = mapper;
+            _clienteService = clienteService;
         }
-
-        public IActionResult Index ()
+        public IActionResult Index()
         {
-            if (clientes == null)
-            {
-                clientes = new List<ClienteModel>();
-            }
+            var clientes = _clienteService.GetAll();
             return View(clientes);
         }
-
-        //Funcionalidade Criar
         [HttpGet]
         public IActionResult Create()
         {
-            Console.WriteLine("Executou a Action Cadastrar()");
-            //Cria a variável para armazenar o SelectList
-            var selectListRepresentantes =
-                new SelectList(representantes,
-                                nameof(RepresentanteModel.RepresentanteId),
-                                nameof(RepresentanteModel.NomeRepresentante));
-            //Adiciona o SelectList a ViewBag para se enviado para a View
-            //A propriedade Representantes é criada de forma dinâmica na ViewBag
-            ViewBag.Representantes = selectListRepresentantes;
-            // Retorna para a View Create um 
-            // objeto modelo com as propriedades em branco 
-            return View(new ClienteModel());
+            var viewModel = new ClienteCreateViewModel
+            {
+                Representantes = new SelectList(_context.Representantes.ToList(), "RepresentanteId", "NomeRepresentante")
+            };
+            return View(viewModel);
         }
-
         [HttpPost]
-        public IActionResult Create(ClienteModel clienteModel)
+        public IActionResult Create(ClienteCreateViewModel viewModel)
         {
-
-            Console.WriteLine("Cliente cadastrado com sucesso!");
-
-            TempData["mensagemSucesso"] = $"Cliente {clienteModel.Nome} foi cadastrado com sucesso!";
-            return RedirectToAction(nameof(Index));
+            // Verifica se todos os dados enviados estão válidos conforme as regras definidas no ViewModel
+            if (ModelState.IsValid)
+            {
+                var cliente = _mapper.Map<ClienteModel>(viewModel);
+                _clienteService.Add(cliente);
+                TempData["mensagemSucesso"] = $"O cliente {viewModel.Nome} foi cadastrado com sucesso";
+                return RedirectToAction(nameof(Index));
+            }
+            else
+            {
+                // Se os dados não estão válidos, recarrega a lista de representantes para a seleção na View
+                viewModel.Representantes = new SelectList(_context.Representantes.ToList(), "RepresentanteId", "NomeRepresentante", viewModel.RepresentanteId);
+                // Retorna a View com o ViewModel contendo os dados submetidos e os erros de validação
+                return View(viewModel);
+            }
         }
-
-
-
         // Anotação de uso do Verb HTTP Get
-        // Funcionalidade Edição
+        [HttpGet]
+        public IActionResult Detail(int id)
+        {
+            var cliente = _clienteService.GetById(id);
+            if (cliente == null) return NotFound();
+            return View(cliente);
+        }
+        // Anotação de uso do Verb HTTP Get
         [HttpGet]
         public IActionResult Edit(int id)
         {
-            var selectListRepresentantes =
-                new SelectList(representantes,
-                                nameof(RepresentanteModel.RepresentanteId),
-                                nameof(RepresentanteModel.NomeRepresentante));
-            ViewBag.Representantes = selectListRepresentantes;
-            // Simulando a busca no banco de dados 
-            var clienteConsultado =
-                clientes.Where(c => c.ClienteId == id).FirstOrDefault();
-            // Retornando o cliente consultado para a View
-            return View(clienteConsultado);
+            var cliente = _clienteService.GetById(id);
+            if (cliente == null)
+            {
+                return NotFound();
+            }
+            else
+            {
+                ViewBag.Representantes =
+                    new SelectList(_context.Representantes.ToList(),
+                                    "RepresentanteId",
+                                    "NomeRepresentante",
+                                    cliente.RepresentanteId);
+                return View(cliente);
+            }
         }
         [HttpPost]
         public IActionResult Edit(ClienteModel clienteModel)
         {
+            _clienteService.Update(clienteModel);
             TempData["mensagemSucesso"] = $"Os dados do cliente {clienteModel.Nome} foram alterados com sucesso";
             return RedirectToAction(nameof(Index));
         }
-
-
-        //Details
-        [HttpGet]
-        public IActionResult Details(int id)
-        {
-            var selectListRepresentantes =
-                new SelectList(representantes,
-                                nameof(RepresentanteModel.RepresentanteId),
-                                nameof(RepresentanteModel.NomeRepresentante));
-            ViewBag.Representantes = selectListRepresentantes;
-            // Simulando a busca no banco de dados 
-            var clienteConsultado =
-                clientes.Where(c => c.ClienteId == id).FirstOrDefault();
-            // Retornando o cliente consultado para a View
-            return View(clienteConsultado);
-
-
-        }
-
-        // Delete
         [HttpGet]
         public IActionResult Delete(int id)
         {
-            // Simulando a busca no banco de dados 
-            var clienteConsultado =
-                clientes.Where(c => c.ClienteId == id).FirstOrDefault();
-            if (clienteConsultado != null)
-            {
-                TempData["mensagemSucesso"] = $"Os dados do cliente {clienteConsultado.Nome} foram removidos com sucesso";
-            }
-            else
-            {
-                TempData["mensagemSucesso"] = $"OPS !!! Cliente inexistente.";
-            }
+            _clienteService.Delete(id);
+            TempData["mensagemSucesso"] = $"Os dados do cliente foram removidos com sucesso";
             return RedirectToAction(nameof(Index));
         }
-
-        /**
-         * Este método estático GerarRepresentantesMocados 
-         */
-        public static List<RepresentanteModel> GerarRepresentantesMocados()
-        {
-            var representantes = new List<RepresentanteModel>
-            {
-                new RepresentanteModel { RepresentanteId = 1, NomeRepresentante = "Representante 1", Cpf = "111.111.111-11" },
-                new RepresentanteModel { RepresentanteId = 2, NomeRepresentante = "Representante 2", Cpf = "222.222.222-22" },
-                new RepresentanteModel { RepresentanteId = 3, NomeRepresentante = "Representante 3", Cpf = "333.333.333-33" },
-                new RepresentanteModel { RepresentanteId = 4, NomeRepresentante = "Representante 4", Cpf = "444.444.444-44" }
-            };
-            return representantes;
-        }
-
-        /**
-        Este método estático GerarClientesMocados
-        cria uma lista de 5 clientes com dados fictícios
-        */
-        public static List<ClienteModel> GerarClientesMocados() 
-        {
-            var clientes = new List<ClienteModel>();
-
-            for (int i = 1; i <= 5; i++)
-            {
-                var cliente = new ClienteModel
-                {
-                    ClienteId = i,
-                    Nome = "Cliente" + i,
-                    Sobrenome = "Sobrenome" + i,
-                    Email = "cliente" + i + "@example.com",
-                    DataNascimento = DateTime.Now.AddYears(-30),
-                    RepresentanteId = i,
-                    Representante = new RepresentanteModel
-                    {
-                        RepresentanteId = i,
-                        NomeRepresentante = "Representante" + i,
-                        Cpf = "000000191"
-                    }
-                };
-                clientes.Add(cliente);
-            }
-            return clientes;
-        }
-
-
-
     }
 }
+
+// Como separo os métodos dos clientes e dos representantes se o nome de ambos métodos são iguais?
